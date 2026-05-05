@@ -4,6 +4,16 @@ App Windows portable để chuyển audio/video tiếng Nhật sang chữ Nhật
 
 ## Yêu cầu để chạy
 
+### Cách nhanh: All-in-One
+
+```powershell
+.\scripts\setup-aio.ps1
+```
+
+Một lệnh duy nhất → cài .NET SDK → tải runtime + model → build portable. Kết quả ở `dist\JapaneseASR-portable\`.
+
+### Cách từng bước
+
 Sau khi clone repo, cần tải thêm các file binary (không có trong git):
 
 ### 1. .NET SDK 8 (máy build)
