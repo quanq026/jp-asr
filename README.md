@@ -2,89 +2,89 @@
 
 App Windows portable để chuyển audio/video tiếng Nhật sang chữ Nhật bằng `whisper.cpp`.
 
-## Mục tiêu
+## Yêu cầu để chạy
 
-- Khách hàng mở `JapaneseASR.exe` trong một thư mục và chạy ngay.
-- Không cần cài Python, .NET runtime, FFmpeg, Whisper hay model trên máy khách.
-- V1 xử lý một file/lần và xuất `TXT`, `SRT`, `VTT`.
+Sau khi clone repo, cần tải thêm các file binary (không có trong git):
 
-## Chế độ
-
-- **Cân bằng:** dùng model `small` quantized. Script mặc định tải `ggml-small-q5_1.bin` vì upstream hiện không có `ggml-small-q5_0.bin`.
-- **Chính xác:** dùng `ggml-medium-q5_0.bin`, có thể chậm hơn đáng kể trên máy yếu.
-
-## Chuẩn bị máy build
-
-Máy build cần .NET SDK 8. Nếu chưa có SDK, chạy:
+### 1. .NET SDK 8 (máy build)
 
 ```powershell
 .\scripts\install-dotnet-sdk.ps1
 ```
 
-Sau đó mở terminal mới hoặc dùng đường dẫn `.dotnet\dotnet.exe` trong workspace.
-
-## Chuẩn bị runtime portable
-
-Tải `ffmpeg.exe`, `whisper-cli.exe`, và model vào đúng thư mục:
+### 2. Runtime binary + model (~700MB)
 
 ```powershell
 .\scripts\prepare-runtime.ps1
 ```
 
-Script tạo/cập nhật:
+Script này sẽ tải về:
 
-```text
-bin\ffmpeg.exe
-bin\whisper-cli.exe
-models\ggml-small-q5_1.bin
-models\ggml-medium-q5_0.bin
-```
+| File | Dung lượng | Mục đích |
+|---|---|---|
+| `bin\ffmpeg.exe` | ~170MB | Tách audio → WAV mono 16kHz |
+| `bin\whisper-cli.exe` | ~0.5MB | Nhận dạng giọng nói (whisper.cpp) |
+| `bin\whisper.dll` + `ggml-*.dll` | ~2MB | DLLs cho whisper |
+| `models\ggml-small-q5_1.bin` | ~190MB | Model chế độ Cân bằng |
+| `models\ggml-medium-q5_0.bin` | ~515MB | Model chế độ Chính xác |
 
-## Build bản portable
+### 3. Build
 
 ```powershell
 .\scripts\publish-portable.ps1
 ```
 
-Kết quả nằm ở:
+Kết quả: `dist\JapaneseASR-portable\` — copy nguyên folder này sang máy khác, chạy `JapaneseASR.exe` là được.
 
-```text
-dist\JapaneseASR-portable\
-```
+## Chế độ xử lý
 
-Copy nguyên thư mục này sang máy khách.
+- **Cân bằng:** model `ggml-small-q5_1.bin` (~190MB), whisper dùng 8 thread.
+- **Chính xác:** model `ggml-medium-q5_0.bin` (~515MB), chậm hơn đáng kể.
 
-## Ghi chú vận hành
+## AI refinement (DeepSeek, Ollama, NVIDIA NIM)
 
-- File TXT là bản đọc liền, đã làm sạch khoảng trắng nhẹ.
-- SRT/VTT giữ timestamp để đối chiếu audio.
-- Nếu app báo thiếu file runtime/model, cần chạy lại script chuẩn bị runtime hoặc dùng lại bản đóng gói đầy đủ.
+Sau khi Whisper tạo SRT, app gửi SRT lên AI để sửa nhẹ text tiếng Nhật (giữ nguyên timestamp). Kết quả → `.ai.srt`.
 
-## AI sửa TXT với Ollama hoặc NVIDIA NIM
+### Provider hỗ trợ
 
-Mặc định app không gọi AI. Nếu muốn hậu xử lý transcript:
+| Provider | Endpoint mặc định | Auth |
+|---|---|---|
+| **DeepSeek** | `https://api.deepseek.com/chat/completions` | Bearer API key |
+| **Ollama** | `http://localhost:11434/api/chat` | Không bắt buộc |
+| **NVIDIA NIM** | `http://localhost:8000/v1/chat/completions` | Bearer API key |
 
-1. Tick `Dùng AI sửa nhẹ TXT sau khi nhận dạng`.
-2. Chọn provider:
-   - `Ollama`: mặc định `http://localhost:11434/api/chat`.
-   - `NVIDIA NIM`: mặc định `http://localhost:8000/v1/chat/completions`.
-3. Nhập đúng model đang chạy.
-4. Nhập API key nếu endpoint yêu cầu.
-
-AI không ghi đè TXT gốc. App tạo thêm:
-
-```text
-<input-name>.ai.txt
-```
-
-Quy tắc prompt của app: không dịch, không tóm tắt, không thêm ý mới, chỉ sửa nhẹ kana/kanji/thuật ngữ/dấu câu/ngắt câu. Glossary mặc định ưu tiên các thuật ngữ JLPT và ngữ pháp Nhật như `自動詞`, `他動詞`, `尊敬語`, `謙譲語`.
-
-Nếu `config\ai.local.json` có `fallbackProviders`, app sẽ tự thử provider dự phòng theo từng chunk khi provider chính gặp lỗi quota/server/timeout/network. Cấu hình khuyến nghị:
+### Cấu hình nhanh với `config\ai.local.json`
 
 ```json
 {
-  "enabled": true,
-  "activeProvider": "Ollama",
-  "fallbackProviders": ["NvidiaNim"]
+    "enabled": true,
+    "activeProvider": "DeepSeek",
+    "providers": {
+        "DeepSeek": {
+            "endpoint": "https://api.deepseek.com/chat/completions",
+            "model": "deepseek-v4-flash",
+            "apiKey": "<your-api-key>"
+        }
+    }
 }
 ```
+
+Nếu có `fallbackProviders`, app tự thử provider dự phòng khi provider chính lỗi.
+
+### Prompt AI
+
+AI chỉ sửa nhẹ kana/kanji/thuật ngữ/dấu câu/ngắt câu. **Không dịch, không tóm tắt, không thêm ý mới.** Giữ nguyên timestamp SRT.
+
+## Output
+
+| File | Nội dung |
+|---|---|
+| `.txt` | Plain text đã làm sạch timestamp, dễ đọc |
+| `.srt` | SubRip subtitle, giữ timestamp |
+| `.vtt` | WebVTT subtitle |
+| `.ai.srt` | SRT đã AI sửa text (nếu bật AI) |
+
+## Lưu ý
+
+- Tên file đầu vào có ký tự tiếng Nhật/special chars → app tự sanitize thành ASCII để tương thích với external tool.
+- File `.ai.local.json` chứa API key — **KHÔNG commit lên git** (đã có trong `.gitignore`).
