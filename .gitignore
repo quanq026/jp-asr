@@ -1,0 +1,24 @@
+bin/*
+!bin/.keep
+Models/ggml-*.bin
+output/*
+!output/.keep
+logs/*
+!logs/.keep
+config/*
+!config/.keep
+dist/
+artifacts/
+.dotnet/
+.tools/
+obj/
+*.user
+*.suo
+*.log
+.env
+*.env
+**/ai.local.json
+**/appsettings.*.json
+# Test/build outputs
+tests/**/bin/
+tests/**/obj/
